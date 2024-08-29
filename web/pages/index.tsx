@@ -1,5 +1,5 @@
 import Head from "next/head";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import "bootstrap/dist/css/bootstrap.min.css";
 
 interface UrlObject {
@@ -12,10 +12,31 @@ interface HomeProps {
   urlList: UrlObject[];
 }
 
-export default function Home({ urlList }: HomeProps) {
+const Home: React.FC<HomeProps> = ({ urlList }) => {
   const [data, setData] = useState<UrlObject[]>(urlList);
   const [newUrl, setNewUrl] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isFetching, setIsFetching] = useState<boolean>(true); 
+
+  useEffect(() => {
+    const fetchUrls = async () => {
+      try {
+        const response = await fetch("http://localhost:5000/api/urls");
+        if (response.ok) {
+          const urls: UrlObject[] = await response.json();
+          setData(urls);
+        } else {
+          console.error("Failed to fetch URLs");
+        }
+      } catch (error) {
+        console.error("Error fetching URLs:", error);
+      } finally {
+        setIsFetching(false); 
+      }
+    };
+
+    fetchUrls();
+  }, []);
 
   const handleOnSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -24,7 +45,7 @@ export default function Home({ urlList }: HomeProps) {
     setIsLoading(true);
 
     try {
-      const response = await fetch("/api/url", {
+      const response = await fetch("http://localhost:5000/api/urls/shorten", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -32,9 +53,13 @@ export default function Home({ urlList }: HomeProps) {
         body: JSON.stringify({ url: _newUrl }),
       });
 
-      const content = await response.json();
+      if (!response.ok) {
+        throw new Error("Failed to shorten URL");
+      }
+
+      const content: { shortUrl: string } = await response.json();
       if (content) {
-        setData([content, ...data]);
+        setData([{ url: _newUrl, code: content.shortUrl, clicked: 0 }, ...data]);
       }
     } catch (error) {
       console.error("Error submitting URL:", error);
@@ -46,16 +71,16 @@ export default function Home({ urlList }: HomeProps) {
   return (
     <>
       <Head>
-        <title>Url-Shorten</title>
+        <title>URL Shortener</title>
       </Head>
       <main className="content">
         <div className="container">
-          <h2 className="mb-3">URL-Shorten</h2>
+          <h2 className="mb-3">URL Shortener</h2>
           <form className="mb-3" onSubmit={handleOnSubmit}>
             <input
               type="text"
               className="w-75"
-              placeholder="Enter long url..."
+              placeholder="Enter long URL..."
               value={newUrl}
               onChange={(e) => setNewUrl(e.target.value)}
             />
@@ -64,53 +89,57 @@ export default function Home({ urlList }: HomeProps) {
               className="btn btn-dark mx-2"
               disabled={isLoading}
             >
-              {isLoading ? "Creating..." : "Create Short Url"}
+              {isLoading ? "Creating..." : "Create Short URL"}
             </button>
           </form>
 
-          <div className="table-responsive custom-table-responsive">
-            <table className="table custom-table">
-              <thead>
-                <tr>
-                  <th scope="col">Long URL</th>
-                  <th scope="col">Short URL</th>
-                  <th scope="col">Clicked</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.map((urlObject) => (
-                  <React.Fragment key={urlObject.code}>
-                    <tr>
-                      <td>
-                        <a href={urlObject.url}>
-                          {urlObject.url.slice(0, 120)}
-                          {urlObject.url.length > 120 ? "..." : ""}
-                        </a>
-                      </td>
-                      <td>
-                        <a
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          href={`/api/${urlObject.code}`}
-                        >
-                          {urlObject.code}
-                        </a>
-                      </td>
-                      <td>{urlObject.clicked}</td>
-                    </tr>
-                    <tr className="spacer">
-                      <td colSpan={3}></td>
-                    </tr>
-                  </React.Fragment>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          {isFetching ? (
+            <div className="text-center">Loading...</div> 
+          ) : (
+            <div className="table-responsive custom-table-responsive">
+              <table className="table custom-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Long URL</th>
+                    <th scope="col">Short URL</th>
+                    <th scope="col">Clicked</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.map((urlObject) => (
+                    <React.Fragment key={urlObject.code}>
+                      <tr>
+                        <td>
+                          <a href={urlObject.url}>
+                            {urlObject.url && urlObject.url.slice(0, 120)}
+                            {urlObject.url && urlObject.url.length > 120 ? "..." : ""}
+                          </a>
+                        </td>
+                        <td>
+                          <a
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            href={`http://localhost:5000/${urlObject.code}`}
+                          >
+                            {urlObject.code}
+                          </a>
+                        </td>
+                        <td>{urlObject.clicked}</td>
+                      </tr>
+                      <tr className="spacer">
+                        <td colSpan={3}></td>
+                      </tr>
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </main>
     </>
   );
-}
+};
 
 export async function getServerSideProps() {
   try {
@@ -134,3 +163,5 @@ export async function getServerSideProps() {
     };
   }
 }
+
+export default Home;
