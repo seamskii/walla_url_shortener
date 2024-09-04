@@ -1,6 +1,7 @@
 import Head from "next/head";
 import React, { useEffect, useState } from "react";
 import "bootstrap/dist/css/bootstrap.min.css";
+import { Modal, Button } from 'react-bootstrap';
 
 interface UrlObject {
   url: string;
@@ -16,7 +17,9 @@ const Home: React.FC<HomeProps> = ({ urlList }) => {
   const [data, setData] = useState<UrlObject[]>(urlList);
   const [newUrl, setNewUrl] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [isFetching, setIsFetching] = useState<boolean>(true); 
+  const [isFetching, setIsFetching] = useState<boolean>(true);
+  const [showErrorModal, setShowErrorModal] = useState<boolean>(false); 
+  const [errorMessage, setErrorMessage] = useState<string>("");
 
   useEffect(() => {
     const fetchUrls = async () => {
@@ -31,7 +34,7 @@ const Home: React.FC<HomeProps> = ({ urlList }) => {
       } catch (error) {
         console.error("Error fetching URLs:", error);
       } finally {
-        setIsFetching(false); 
+        setIsFetching(false);
       }
     };
 
@@ -40,10 +43,18 @@ const Home: React.FC<HomeProps> = ({ urlList }) => {
 
   const handleOnSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+  
+    const urlExists = data.some((item) => item.url === newUrl);
+  
+    if (urlExists) {
+      alert("URL already exists in the list."); 
+      return;
+    }
+  
     const _newUrl = newUrl;
     setNewUrl("");
     setIsLoading(true);
-
+  
     try {
       const response = await fetch("http://localhost:5000/api/urls/shorten", {
         method: "POST",
@@ -52,14 +63,17 @@ const Home: React.FC<HomeProps> = ({ urlList }) => {
         },
         body: JSON.stringify({ url: _newUrl }),
       });
-
+  
       if (!response.ok) {
         throw new Error("Failed to shorten URL");
       }
-
+  
       const content: { shortUrl: string } = await response.json();
       if (content) {
-        setData([{ url: _newUrl, code: content.shortUrl, clicked: 0 }, ...data]);
+        setData([
+          { url: _newUrl, code: content.shortUrl, clicked: 0 },
+          ...data,
+        ]);
       }
     } catch (error) {
       console.error("Error submitting URL:", error);
@@ -67,6 +81,7 @@ const Home: React.FC<HomeProps> = ({ urlList }) => {
       setIsLoading(false);
     }
   };
+  
 
   return (
     <>
@@ -94,7 +109,7 @@ const Home: React.FC<HomeProps> = ({ urlList }) => {
           </form>
 
           {isFetching ? (
-            <div className="text-center">Loading...</div> 
+            <div className="text-center">Loading...</div>
           ) : (
             <div className="table-responsive custom-table-responsive">
               <table className="table custom-table">
@@ -110,9 +125,15 @@ const Home: React.FC<HomeProps> = ({ urlList }) => {
                     <React.Fragment key={urlObject.code}>
                       <tr>
                         <td>
-                          <a href={urlObject.url}>
+                          <a
+                            href={urlObject.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
                             {urlObject.url && urlObject.url.slice(0, 120)}
-                            {urlObject.url && urlObject.url.length > 120 ? "..." : ""}
+                            {urlObject.url && urlObject.url.length > 120
+                              ? "..."
+                              : ""}
                           </a>
                         </td>
                         <td>
@@ -137,12 +158,25 @@ const Home: React.FC<HomeProps> = ({ urlList }) => {
           )}
         </div>
       </main>
+
+      <Modal show={showErrorModal} onHide={() => setShowErrorModal(false)}>
+        <Modal.Header closeButton>
+          <Modal.Title>Error</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>{errorMessage}</Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowErrorModal(false)}>
+            Close
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </>
   );
 };
 
 export async function getServerSideProps() {
   try {
+    console.log('dd')
     const res = await fetch("http://localhost:5000/api/urls");
     if (!res.ok) {
       throw new Error("Failed to fetch");
